@@ -8,9 +8,10 @@ from pathlib import Path
 import adsk.core
 import adsk.fusion
 
-from .fusion_export.export import export_design
+from .fusion_export.export import Alert, Alerts, Severity, export_design
 from .fusion_export.git import SubprocessGit
 from .fusion_export.log import PACKAGE, configure_logging
+from .fusion_export.notify import Broadcast, MacNotification
 
 PROJECTS_ROOT = Path.home() / "projects"
 LOG_DIR = Path.home() / "Library" / "Logs" / "fusion-export"
@@ -40,17 +41,45 @@ class FusionArchiveExporter:
         return manager.execute(options)
 
 
+class FusionMessageBox:
+    """Alerts as a modal Fusion message box."""
+
+    ICONS = {
+        Severity.WARNING: adsk.core.MessageBoxIconTypes.WarningIconType,
+        Severity.ERROR: adsk.core.MessageBoxIconTypes.CriticalIconType,
+    }
+
+    def send(self, alert: Alert) -> None:
+        adsk.core.Application.get().userInterface.messageBox(
+            alert.message,
+            alert.title,
+            adsk.core.MessageBoxButtonTypes.OKButtonType,
+            self.ICONS[alert.severity],
+        )
+
+
 class DesignSavedHandler(adsk.core.DocumentEventHandler):
     """Exports each saved Fusion design."""
 
+    def __init__(self, alerts: Alerts) -> None:
+        super().__init__()
+        self.alerts = alerts
+
     def notify(self, args: adsk.core.DocumentEventArgs) -> None:
         try:
-            export_saved(args.document)
-        except Exception:
+            export_saved(args.document, self.alerts)
+        except Exception as e:
             logger.exception("documentSaved handler failed")
+            self.alerts.send(
+                Alert(
+                    Severity.ERROR,
+                    "Fusion export failed",
+                    f"Save handler failed: {type(e).__name__}: {e}",
+                )
+            )
 
 
-def export_saved(document: adsk.core.Document | None) -> None:
+def export_saved(document: adsk.core.Document | None, alerts: Alerts) -> None:
     if document is None:
         logger.debug("documentSaved without a document")
         return
@@ -68,6 +97,7 @@ def export_saved(document: adsk.core.Document | None) -> None:
         PROJECTS_ROOT,
         SubprocessGit.locate(),
         FusionArchiveExporter(fusion_document.design),
+        alerts,
     )
 
 
@@ -81,7 +111,7 @@ def run(context):
         event = adsk.core.Application.get().documentSaved
         if _save_handler is not None:
             event.remove(_save_handler)
-        handler = DesignSavedHandler()
+        handler = DesignSavedHandler(Broadcast(MacNotification(), FusionMessageBox()))
         event.add(handler)
         _save_handler = handler
         logger.info("Started; exporting saved designs under %s", PROJECTS_ROOT)

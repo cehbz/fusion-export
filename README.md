@@ -26,21 +26,25 @@ With `aqm` holding `boards/fan_controller/`:
 | `aqm-lid` | `aqm/lid.f3d` |
 | `aqm` | `aqm/aqm.f3d` |
 
-A name that matches no repo, contains `/`, or leaves a file name of empty, `.` or `..` is skipped and logged with the reason.
+A name that matches no repo, contains `/`, or leaves a file name of empty, `.` or `..` is skipped, with an alert giving the reason.
 
 ## What a save produces
 
-The `.f3d` at the resolved path, written atomically. If git does not already store that path in LFS (by `git check-attr filter`), the rule `*.f3d filter=lfs diff=lfs merge=lfs -text` is appended to the `.gitattributes` in the file's own directory, creating it. The pattern has no slash, so the rule also covers that directory's subdirectories. The native Git LFS `pre-push` hook is written to `.git/hooks` if missing. Without git-lfs installed the LFS wiring is skipped and the export still happens. STEP and STL are derived and not committed.
+The `.f3d` at the resolved path, written atomically. If git does not already store that path in LFS (by `git check-attr filter`), the rule `*.f3d filter=lfs diff=lfs merge=lfs -text` is appended to the `.gitattributes` in the file's own directory, creating it. The pattern has no slash, so the rule also covers that directory's subdirectories. The native Git LFS `pre-push` hook is written to `.git/hooks` if missing. Without git-lfs installed the LFS wiring is skipped, with an alert, and the export still happens. STEP and STL are derived and not committed.
 
-A design that links other designs exports an .f3d that is not self-contained, and the log warns with the linked components' names; Fusion refuses to open it on its own. Break the link (right-click the occurrence > Break Link) to embed it.
+A design that links other designs exports an .f3d that is not self-contained, and an alert names the linked components; Fusion refuses to open it on its own. Break the link (right-click the occurrence > Break Link) to embed it.
 
 ## Restoring from the repo
 
-A design opened from its `.f3d` (File > Open > Open from my computer) is named after the file, so `aqm/boards/fan_controller/fan_controller.f3d` opens as `fan_controller`. Rename it to its `<repo>-<path>` name, here `aqm-boards-fan_controller`, before saving; otherwise the save is skipped and logged as matching no repo.
+A design opened from its `.f3d` (File > Open > Open from my computer) is named after the file, so `aqm/boards/fan_controller/fan_controller.f3d` opens as `fan_controller`. Rename it to its `<repo>-<path>` name, here `aqm-boards-fan_controller`, before saving; otherwise the save is skipped as matching no repo.
 
 ## Committing
 
 The add-in never commits or pushes. Commit the `.f3d`, and the `.gitattributes` beside it when one was written, in the project repo yourself.
+
+## Alerts
+
+A skipped design name, a design linking other designs, missing git-lfs, and a failed export each raise an alert naming the design and the specifics: the skip reason, the linked components, or the target path and error. Each alert is posted as a macOS notification and shown in a Fusion message box. A successful export is only logged.
 
 ## Logs
 
