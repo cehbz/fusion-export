@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from fusion_export.git import GIT_LFS_DIRS, SubprocessGit, find_tool
-from fusion_export.lfs import CAD_RULE, PRE_PUSH_HOOK, Wiring, ensure_lfs
+from fusion_export.lfs import F3D_RULE, PRE_PUSH_HOOK, Wiring, ensure_lfs
 
 pytestmark = pytest.mark.integration
 
@@ -41,6 +41,7 @@ def isolated_config(tmp_path, monkeypatch) -> Path:
     write_global_config(config)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"):
         monkeypatch.delenv(var, raising=False)
     return config
@@ -58,6 +59,12 @@ def repo(tmp_path) -> Path:
     path.mkdir()
     run_git(path, "init", "-q")
     return path
+
+
+def attributes(directory: Path) -> str | None:
+    """The directory's .gitattributes text, None when absent."""
+    path = directory / ".gitattributes"
+    return path.read_text() if path.exists() else None
 
 
 def native_hooks(repo: Path) -> Path:
@@ -107,19 +114,67 @@ def test_hook_constant_matches_installed_git_lfs(repo):
     assert (native_hooks(repo) / "pre-push").read_text() == PRE_PUSH_HOOK
 
 
+def test_lfs_tracked_untracked_path(repo):
+    assert not GIT.lfs_tracked(repo, repo / "cad" / "lid.f3d")
+
+
+def test_lfs_tracked_root_rule_matches_nested_path(repo):
+    (repo / ".gitattributes").write_text(F3D_RULE)
+    assert GIT.lfs_tracked(repo, repo / "boards" / "fan_controller" / "enclosure.f3d")
+    assert not GIT.lfs_tracked(repo, repo / "boards" / "notes.txt")
+
+
+def test_lfs_tracked_per_directory_rule(repo):
+    boards = repo / "boards"
+    boards.mkdir()
+    (boards / ".gitattributes").write_text(F3D_RULE)
+    (repo / "docs").mkdir()
+    assert GIT.lfs_tracked(repo, boards / "lid.f3d")
+    assert GIT.lfs_tracked(repo, boards / "fan_controller" / "enclosure.f3d")
+    assert not GIT.lfs_tracked(repo, repo / "docs" / "lid.f3d")
+    assert not GIT.lfs_tracked(repo, repo / "lid.f3d")
+
+
+@pytest.mark.parametrize("rule", ["*.f3d -filter\n", "*.f3d filter=other\n", "*.f3d !filter\n"])
+def test_lfs_tracked_other_filter_values(repo, rule):
+    (repo / ".gitattributes").write_text(rule)
+    assert not GIT.lfs_tracked(repo, repo / "lid.f3d")
+
+
+def test_lfs_tracked_non_ascii_path(repo):
+    d = repo / "fan contrôleur"
+    d.mkdir()
+    (d / ".gitattributes").write_text(F3D_RULE)
+    assert GIT.lfs_tracked(repo, d / "lid é.f3d")
+
+
 def test_ensure_lfs_end_to_end(repo, tmp_path, isolated_config):
     gate = tmp_path / "gate-hooks"
     gate.mkdir()
     (gate / "commit-msg").write_text("#!/bin/sh\necho gate\n")
     write_global_config(isolated_config, f"[core]\n\thooksPath = {gate}\n")
-    first = ensure_lfs(repo, GIT)
-    second = ensure_lfs(repo, GIT)
+    directory = repo / "boards" / "fan_controller"
+    directory.mkdir(parents=True)
+    path = directory / "enclosure.f3d"
+    first = ensure_lfs(repo, path, GIT)
+    second = ensure_lfs(repo, path, GIT)
     assert first.tracked
     assert second == Wiring()
-    assert (repo / ".gitattributes").read_text() == CAD_RULE
+    assert attributes(directory) == F3D_RULE
+    assert not (repo / ".gitattributes").exists()
     assert sorted(p.name for p in gate.iterdir()) == ["commit-msg"]
     assert sorted(p.name for p in native_hooks(repo).iterdir() if not p.name.endswith(".sample")) == [
         "pre-push"
     ]
     assert (native_hooks(repo) / "pre-push").read_text() == PRE_PUSH_HOOK
     assert os.access(native_hooks(repo) / "pre-push", os.X_OK)
+
+
+def test_ensure_lfs_leaves_path_covered_by_root_rule(repo):
+    (repo / ".gitattributes").write_text(F3D_RULE)
+    directory = repo / "boards"
+    directory.mkdir()
+    result = ensure_lfs(repo, directory / "lid.f3d", GIT)
+    assert not result.tracked
+    assert not (directory / ".gitattributes").exists()
+    assert attributes(repo) == F3D_RULE

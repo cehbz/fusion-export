@@ -1,4 +1,4 @@
-"""Git LFS wiring for a repo's cad/*.f3d exports."""
+"""Git LFS wiring for exported .f3d files."""
 
 from __future__ import annotations
 
@@ -9,10 +9,11 @@ from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
-CAD_PATTERN = "cad/*.f3d"
+# Slash-free, so it matches at any depth under the .gitattributes holding it.
+F3D_PATTERN = "*.f3d"
 
-# The line `git lfs track` writes for CAD_PATTERN.
-CAD_RULE = f"{CAD_PATTERN} filter=lfs diff=lfs merge=lfs -text\n"
+# The line `git lfs track` writes for F3D_PATTERN.
+F3D_RULE = f"{F3D_PATTERN} filter=lfs diff=lfs merge=lfs -text\n"
 
 # The pre-push hook `git lfs install` writes (git-lfs 3.8).
 PRE_PUSH_HOOK = (
@@ -32,6 +33,10 @@ class Git(Protocol):
 
     def common_dir(self, repo: Path) -> Path: ...
 
+    def lfs_tracked(self, repo: Path, path: Path) -> bool:
+        """Whether git attributes give path, in repo, filter=lfs; path need not exist."""
+        ...
+
 
 @dataclass(frozen=True)
 class Wiring:
@@ -42,19 +47,20 @@ class Wiring:
     hook_written: bool = False
 
 
-def ensure_lfs(repo: Path, git: Git) -> Wiring:
-    """Add CAD_RULE to .gitattributes and write the native pre-push hook, where missing.
+def ensure_lfs(repo: Path, path: Path, git: Git) -> Wiring:
+    """Make path LFS-tracked and write the native pre-push hook, where missing.
 
-    Writes files only; git-lfs is not run, so no hooks reach core.hooksPath.
+    An untracked path gets F3D_RULE appended to the .gitattributes in its own
+    directory. Writes files only; git-lfs is not run, so no hooks reach
+    core.hooksPath.
     """
     if not git.lfs_available():
         logger.warning("LFS wiring skipped for %s: git-lfs not found", repo)
         return Wiring(skipped=True)
     tracked = False
-    attributes = repo / ".gitattributes"
-    if not has_lfs_rule(attributes, CAD_PATTERN):
-        append_rule(attributes, CAD_RULE)
-        logger.info("LFS tracking %s in %s", CAD_PATTERN, repo)
+    if not git.lfs_tracked(repo, path):
+        append_rule(path.parent / ".gitattributes", F3D_RULE)
+        logger.info("LFS tracking %s in %s", F3D_PATTERN, path.parent)
         tracked = True
     hook = git.common_dir(repo) / "hooks" / "pre-push"
     hook_written = False
@@ -65,19 +71,6 @@ def ensure_lfs(repo: Path, git: Git) -> Wiring:
         logger.info("LFS pre-push hook installed at %s", hook)
         hook_written = True
     return Wiring(tracked=tracked, hook_written=hook_written)
-
-
-def has_lfs_rule(gitattributes: Path, pattern: str) -> bool:
-    """Whether gitattributes has a line for pattern with filter=lfs."""
-    try:
-        text = gitattributes.read_text()
-    except FileNotFoundError:
-        return False
-    for line in text.splitlines():
-        fields = line.split()
-        if fields and fields[0] == pattern and "filter=lfs" in fields[1:]:
-            return True
-    return False
 
 
 def append_rule(gitattributes: Path, rule: str) -> None:

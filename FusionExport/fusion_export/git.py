@@ -41,6 +41,12 @@ class SubprocessGit:
         )
         return Path(out.strip())
 
+    def lfs_tracked(self, repo: Path, path: Path) -> bool:
+        rel = path.relative_to(repo)
+        out = self._run([str(self.git), "check-attr", "-z", "filter", "--", str(rel)], repo)
+        fields = out.split("\0")
+        return len(fields) >= 3 and fields[2] == "lfs"
+
     def _env(self) -> dict[str, str]:
         dirs = [str(p.parent) for p in (self.git_lfs, self.git) if p is not None]
         return {**os.environ, "PATH": os.pathsep.join([*dirs, os.environ.get("PATH", "")])}

@@ -5,18 +5,25 @@ from pathlib import Path
 import pytest
 
 from fusion_export.export import export_design
-from fusion_export.lfs import CAD_RULE, PRE_PUSH_HOOK
+from fusion_export.lfs import F3D_RULE, PRE_PUSH_HOOK
 
 ARCHIVE = b"PK\x03\x04 new archive"
 OLD = b"PK\x03\x04 old archive"
 
 
 class FakeGit:
+    def __init__(self) -> None:
+        self.queries: list[tuple[Path, Path]] = []
+
     def lfs_available(self) -> bool:
         return True
 
     def common_dir(self, repo: Path) -> Path:
         return repo / ".git"
+
+    def lfs_tracked(self, repo: Path, path: Path) -> bool:
+        self.queries.append((repo, path))
+        return False
 
 
 class FailingGit(FakeGit):
@@ -90,9 +97,11 @@ def test_creates_cad_dir(root, cad, git):
     assert cad.is_dir()
 
 
-def test_wires_lfs_in_resolved_repo(root, git):
+def test_wires_lfs_in_resolved_repo(root, cad, target, git):
     export_design("aqm-lid", root, git, FakeExporter())
-    assert (root / "aqm" / ".gitattributes").read_text() == CAD_RULE
+    assert git.queries == [(root / "aqm", target)]
+    assert (cad / ".gitattributes").read_text() == F3D_RULE
+    assert not (root / "aqm" / ".gitattributes").exists()
     assert (root / "aqm" / ".git" / "hooks" / "pre-push").read_text() == PRE_PUSH_HOOK
 
 
@@ -108,7 +117,7 @@ def test_exports_into_hidden_temp_dir_beside_target(root, cad, git):
 
 def test_removes_temp_dir_after_export(root, cad, git):
     export_design("aqm-lid", root, git, FakeExporter())
-    assert listing(cad) == ["lid.f3d"]
+    assert listing(cad) == [".gitattributes", "lid.f3d"]
 
 
 def test_replaces_existing_target(root, target, git):
@@ -123,7 +132,7 @@ def test_failed_export_leaves_target(root, cad, target, git, caplog):
         result = export_design("aqm-lid", root, git, FakeExporter(content=b"partial", result=False))
     assert result is None
     assert target.read_bytes() == OLD
-    assert listing(cad) == ["lid.f3d"]
+    assert listing(cad) == [".gitattributes", "lid.f3d"]
     assert any(r.levelno >= logging.ERROR and "aqm-lid" in r.getMessage() for r in caplog.records)
 
 
@@ -134,7 +143,7 @@ def test_raising_export_leaves_target_and_is_logged(root, cad, target, git, capl
         result = export_design("aqm-lid", root, git, exporter)
     assert result is None
     assert target.read_bytes() == OLD
-    assert listing(cad) == ["lid.f3d"]
+    assert listing(cad) == [".gitattributes", "lid.f3d"]
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert errors and errors[0].exc_info is not None
     assert "export exploded" in caplog.text
@@ -146,7 +155,7 @@ def test_export_reporting_success_without_file_leaves_target(root, cad, target, 
         result = export_design("aqm-lid", root, git, FakeExporter(content=None))
     assert result is None
     assert target.read_bytes() == OLD
-    assert listing(cad) == ["lid.f3d"]
+    assert listing(cad) == [".gitattributes", "lid.f3d"]
     assert any(r.levelno >= logging.ERROR for r in caplog.records)
 
 
@@ -190,7 +199,7 @@ def test_removes_leftover_staging_dirs(root, cad, target, git, caplog):
     with caplog.at_level(logging.INFO, logger="fusion_export"):
         export_design("aqm-lid", root, git, FakeExporter())
     assert not stale.exists()
-    assert listing(cad) == ["lid.f3d"]
+    assert listing(cad) == [".gitattributes", "lid.f3d"]
     assert ".fusion-export-abc123" in caplog.text
 
 
@@ -201,7 +210,7 @@ def test_leaves_unrelated_cad_entries(root, cad, git):
     (cad / ".fusion-export-file").write_bytes(b"not a dir")
     (cad / ".fusion-export-old").mkdir()
     export_design("aqm-lid", root, git, FakeExporter())
-    assert listing(cad) == [".fusion-export-file", "lid.f3d", "notes", "other.f3d"]
+    assert listing(cad) == [".fusion-export-file", ".gitattributes", "lid.f3d", "notes", "other.f3d"]
 
 
 def test_skipped_export_touches_no_staging_dirs(root, git):

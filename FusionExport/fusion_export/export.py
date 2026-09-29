@@ -53,7 +53,7 @@ def export_design(
             return None
         cad = target.parent
         cad.mkdir(exist_ok=True)
-        ensure_lfs(cad.parent, git)
+        ensure_lfs(cad.parent, target, git)
         _remove_stale_staging(cad)
         staging = Path(tempfile.mkdtemp(prefix=STAGING_PREFIX, dir=cad))
         try:
