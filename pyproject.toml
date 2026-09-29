@@ -1,0 +1,16 @@
+[project]
+name = "fusion-export"
+version = "0.1.0"
+description = "Fusion add-in that exports each saved design's .f3d into its project's git repo."
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["FusionExport"]
+testpaths = ["tests"]
