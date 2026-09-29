@@ -12,7 +12,14 @@ class Target:
     path: Path
 
 
-def resolve(design_name: str, projects_root: Path) -> Target | None:
+@dataclass(frozen=True)
+class Skip:
+    """Why a design name has no target."""
+
+    reason: str
+
+
+def resolve(design_name: str, projects_root: Path) -> Target | Skip:
     """The Target for a design named <repo>[-<dir>...][-<part>].
 
     <repo> is the longest hyphen-prefix of the name that is a directory
@@ -22,30 +29,30 @@ def resolve(design_name: str, projects_root: Path) -> Target | None:
     <part>.f3d in the deepest directory reached, with <part> the segments left
     over, or <dir name>.f3d when none are. Names are matched exactly, even on
     case-insensitive filesystems; dot-directories and symlinks are not entered.
-    None when no repo matches, the name contains "/", or <part> is empty,
-    "." or "..".
+    A Skip stating the reason when no repo matches, the name contains "/",
+    <part> is empty, "." or "..", or a directory is unreadable.
     """
     if "/" in design_name:
-        return None
+        return Skip("the name contains '/'")
     names = _listing(projects_root)
     if names is None:
-        return None
+        return Skip(f"cannot read {projects_root}")
     parts = design_name.split("-")
     for n in range(len(parts), 0, -1):
         repo_name = "-".join(parts[:n])
         repo = projects_root / repo_name
         if repo_name in names and (repo / ".git").exists():
             return _walk(repo, parts[n:])
-    return None
+    return Skip(f"no repo under {projects_root} matches")
 
 
-def _walk(repo: Path, rest: list[str]) -> Target | None:
-    """The Target for the segments rest under repo."""
+def _walk(repo: Path, rest: list[str]) -> Target | Skip:
+    """The Target for the segments rest under repo, or a Skip."""
     directory = repo
     while rest:
         subdirs = _subdirectories(directory)
         if subdirs is None:
-            return None
+            return Skip(f"cannot read {directory}")
         for k in range(len(rest), 0, -1):
             run = "-".join(rest[:k])
             if run in subdirs:
@@ -56,7 +63,7 @@ def _walk(repo: Path, rest: list[str]) -> Target | None:
             break
     part = "-".join(rest) if rest else directory.name
     if part in ("", ".", ".."):
-        return None
+        return Skip(f"the file name would be {part!r}")
     return Target(repo, directory / f"{part}.f3d")
 
 

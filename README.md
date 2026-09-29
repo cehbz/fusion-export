@@ -26,7 +26,7 @@ With `aqm` holding `boards/fan_controller/`:
 | `aqm-lid` | `aqm/lid.f3d` |
 | `aqm` | `aqm/aqm.f3d` |
 
-A name that matches no repo, contains `/`, or leaves a file name of empty, `.` or `..` is skipped and logged.
+A name that matches no repo, contains `/`, or leaves a file name of empty, `.` or `..` is skipped and logged with the reason.
 
 ## What a save produces
 

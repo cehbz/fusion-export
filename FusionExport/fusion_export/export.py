@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .lfs import Git, ensure_lfs
-from .resolve import resolve
+from .resolve import Skip, resolve
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,8 @@ def export_design(
     """
     try:
         target = resolve(design_name, projects_root)
-        if target is None:
-            logger.info("Export of %r skipped: no repo for it under %s", design_name, projects_root)
+        if isinstance(target, Skip):
+            logger.info("Export of %r skipped: %s", design_name, target.reason)
             return None
         path = target.path
         ensure_lfs(target.repo, path, git)

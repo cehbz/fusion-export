@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from fusion_export.resolve import Target, resolve
+from fusion_export.resolve import Skip, Target, resolve
 
 
 def repo(root: Path, name: str, *, gitfile: bool = False) -> Path:
@@ -60,17 +60,17 @@ def test_dir_without_git_ignored(tmp_path):
 
 def test_no_match(tmp_path):
     repo(tmp_path, "other")
-    assert resolve("aqm-lid", tmp_path) is None
+    assert resolve("aqm-lid", tmp_path) == no_repo(tmp_path)
 
 
 def test_prefix_splits_only_at_hyphen(tmp_path):
     repo(tmp_path, "aqm")
-    assert resolve("aqmx-lid", tmp_path) is None
+    assert resolve("aqmx-lid", tmp_path) == no_repo(tmp_path)
 
 
 def test_case_sensitive(tmp_path):
     repo(tmp_path, "aqm")
-    assert resolve("AQM-lid", tmp_path) is None
+    assert resolve("AQM-lid", tmp_path) == no_repo(tmp_path)
 
 
 # Name exhausted: file named after the directory
@@ -164,34 +164,62 @@ def test_symlinked_dir_not_entered(tmp_path):
 # Rejected names
 
 
+SLASH = Skip("the name contains '/'")
+
+
+def no_repo(root: Path) -> Skip:
+    return Skip(f"no repo under {root} matches")
+
+
+def bad_file_name(part: str) -> Skip:
+    return Skip(f"the file name would be {part!r}")
+
+
 def test_trailing_hyphen_empty_part(tmp_path, aqm):
-    assert resolve("aqm-", tmp_path) is None
-    assert resolve("aqm-boards-", tmp_path) is None
+    assert resolve("aqm-", tmp_path) == bad_file_name("")
+    assert resolve("aqm-boards-", tmp_path) == bad_file_name("")
 
 
 def test_empty_part_no_fallback_to_shorter_prefix(tmp_path):
     repo(tmp_path, "aqm")
     repo(tmp_path, "aqm-sensor")
-    assert resolve("aqm-sensor-", tmp_path) is None
+    assert resolve("aqm-sensor-", tmp_path) == bad_file_name("")
 
 
 def test_empty_name(tmp_path):
-    assert resolve("", tmp_path) is None
+    assert resolve("", tmp_path) == no_repo(tmp_path)
 
 
 def test_slash_in_part_rejected(tmp_path, aqm):
-    assert resolve("aqm-a/b", tmp_path) is None
-    assert resolve("aqm-../x", tmp_path) is None
-    assert resolve("aqm-boards/sensor-lid", tmp_path) is None
+    assert resolve("aqm-a/b", tmp_path) == SLASH
+    assert resolve("aqm-../x", tmp_path) == SLASH
+    assert resolve("aqm-boards/sensor-lid", tmp_path) == SLASH
 
 
 def test_dot_parts_rejected(tmp_path, aqm):
-    assert resolve("aqm-.", tmp_path) is None
-    assert resolve("aqm-..", tmp_path) is None
-    assert resolve("aqm-boards-..", tmp_path) is None
+    assert resolve("aqm-.", tmp_path) == bad_file_name(".")
+    assert resolve("aqm-..", tmp_path) == bad_file_name("..")
+    assert resolve("aqm-boards-..", tmp_path) == bad_file_name("..")
 
 
 def test_slash_in_name_prefix_rejected(tmp_path):
     repo(tmp_path, "aqm")
     (tmp_path / "x").mkdir()
-    assert resolve("../aqm-lid", tmp_path) is None
+    assert resolve("../aqm-lid", tmp_path) == SLASH
+
+
+def test_unreadable_projects_root(tmp_path):
+    missing = tmp_path / "missing"
+    assert resolve("aqm-lid", missing) == Skip(f"cannot read {missing}")
+
+
+def test_unreadable_repo_directory(tmp_path, aqm, monkeypatch):
+    real = Path.iterdir
+
+    def iterdir(self):
+        if self == aqm:
+            raise PermissionError("denied")
+        return real(self)
+
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    assert resolve("aqm-boards-lid", tmp_path) == Skip(f"cannot read {aqm}")

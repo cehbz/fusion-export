@@ -184,7 +184,18 @@ def test_no_repo_skips_and_logs_name(root, git, caplog):
     assert len(records) == 1
     record = records[0]
     assert record.levelno == logging.INFO
-    assert "skip" in record.getMessage()
+    assert record.getMessage() == f"Export of 'other-lid' skipped: no repo under {root} matches"
+
+
+def test_bad_file_name_skip_logs_its_own_reason(root, git, caplog):
+    with caplog.at_level(logging.INFO, logger="fusion_export"):
+        result = export_design("aqm-", root, git, FakeExporter())
+    assert result is None
+    records = [r for r in caplog.records if "skipped" in r.getMessage()]
+    assert len(records) == 1
+    assert records[0].levelno == logging.INFO
+    assert records[0].getMessage() == "Export of 'aqm-' skipped: the file name would be ''"
+    assert "no repo" not in caplog.text
 
 
 def test_lfs_failure_is_logged_not_raised(root, target, caplog):
