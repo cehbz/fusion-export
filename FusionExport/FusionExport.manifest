@@ -3,7 +3,7 @@
     "type": "addin",
     "author": "Charles Haynes",
     "description": {
-        "": "Exports the design's .f3d into its project's git repo at cad/<part>.f3d on every document save."
+        "": "Exports the design's .f3d into its project's git repo, at the path its name gives, on every document save."
     },
     "version": "0.1.0",
     "runOnStartup": true,

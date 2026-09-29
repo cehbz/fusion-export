@@ -1,29 +1,80 @@
 """Map a Fusion design name to its .f3d path in a git repo."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 
-def resolve(design_name: str, projects_root: Path) -> Path | None:
-    """Return projects_root/<repo>/cad/<part>.f3d for a design named <repo>-<part>.
+@dataclass(frozen=True)
+class Target:
+    """Where a design's archive goes: the git repo root and the .f3d path in it."""
+
+    repo: Path
+    path: Path
+
+
+def resolve(design_name: str, projects_root: Path) -> Target | None:
+    """The Target for a design named <repo>[-<dir>...][-<part>].
 
     <repo> is the longest hyphen-prefix of the name that is a directory
-    directly under projects_root (exact name match, even on
-    case-insensitive filesystems) containing .git (directory or file).
-    None when no prefix matches, the part is empty, or the part could
-    escape cad/ (contains "/" or is "." or "..").
+    directly under projects_root containing .git (directory or file). The
+    remaining segments then walk down: at each level the longest hyphen-joined
+    run of leading segments naming a subdirectory is entered. The file is
+    <part>.f3d in the deepest directory reached, with <part> the segments left
+    over, or <dir name>.f3d when none are. Names are matched exactly, even on
+    case-insensitive filesystems; dot-directories and symlinks are not entered.
+    None when no repo matches, the name contains "/", or <part> is empty,
+    "." or "..".
     """
     if "/" in design_name:
         return None
-    try:
-        names = {p.name for p in projects_root.iterdir()}
-    except OSError:
+    names = _listing(projects_root)
+    if names is None:
         return None
     parts = design_name.split("-")
     for n in range(len(parts), 0, -1):
-        repo = "-".join(parts[:n])
-        if repo in names and (projects_root / repo / ".git").exists():
-            part = "-".join(parts[n:])
-            if not part or part in (".", ".."):
-                return None
-            return projects_root / repo / "cad" / f"{part}.f3d"
+        repo_name = "-".join(parts[:n])
+        repo = projects_root / repo_name
+        if repo_name in names and (repo / ".git").exists():
+            return _walk(repo, parts[n:])
     return None
+
+
+def _walk(repo: Path, rest: list[str]) -> Target | None:
+    """The Target for the segments rest under repo."""
+    directory = repo
+    while rest:
+        subdirs = _subdirectories(directory)
+        if subdirs is None:
+            return None
+        for k in range(len(rest), 0, -1):
+            run = "-".join(rest[:k])
+            if run in subdirs:
+                directory = directory / run
+                rest = rest[k:]
+                break
+        else:
+            break
+    part = "-".join(rest) if rest else directory.name
+    if part in ("", ".", ".."):
+        return None
+    return Target(repo, directory / f"{part}.f3d")
+
+
+def _listing(directory: Path) -> set[str] | None:
+    """Entry names in directory, None when unreadable."""
+    try:
+        return {p.name for p in directory.iterdir()}
+    except OSError:
+        return None
+
+
+def _subdirectories(directory: Path) -> set[str] | None:
+    """Names of directory's subdirectories, excluding dot-directories and symlinks."""
+    try:
+        return {
+            p.name
+            for p in directory.iterdir()
+            if not p.name.startswith(".") and p.is_dir() and not p.is_symlink()
+        }
+    except OSError:
+        return None
