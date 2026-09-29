@@ -32,6 +32,8 @@ A name that matches no repo, contains `/`, or leaves a file name of empty, `.` o
 
 The `.f3d` at the resolved path, written atomically. If git does not already store that path in LFS (by `git check-attr filter`), the rule `*.f3d filter=lfs diff=lfs merge=lfs -text` is appended to the `.gitattributes` in the file's own directory, creating it. The pattern has no slash, so the rule also covers that directory's subdirectories. The native Git LFS `pre-push` hook is written to `.git/hooks` if missing. Without git-lfs installed the LFS wiring is skipped and the export still happens. STEP and STL are derived and not committed.
 
+A design that links other designs exports an .f3d that is not self-contained, and the log warns with the linked components' names; Fusion refuses to open it on its own. Break the link (right-click the occurrence > Break Link) to embed it.
+
 ## Committing
 
 The add-in never commits or pushes. Commit the `.f3d`, and the `.gitattributes` beside it when one was written, in the project repo yourself.

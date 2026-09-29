@@ -27,6 +27,11 @@ class FusionArchiveExporter:
     def __init__(self, design: adsk.fusion.Design) -> None:
         self.design = design
 
+    def linked_components(self) -> list[str]:
+        """Names of the occurrences that reference external components, at any depth."""
+        occurrences = self.design.rootComponent.allOccurrences
+        return [o.name for o in occurrences if o.isReferencedComponent]
+
     def write_archive(self, path: Path) -> bool:
         manager = self.design.exportManager
         options = manager.createFusionArchiveExportOptions(str(path))

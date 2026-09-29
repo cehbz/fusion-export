@@ -39,11 +39,20 @@ class FakeExporter:
         content: bytes | None = ARCHIVE,
         result: bool = True,
         error: Exception | None = None,
+        linked: list[str] | None = None,
+        link_error: Exception | None = None,
     ) -> None:
+        self.linked = linked or []
+        self.link_error = link_error
         self.content = content
         self.result = result
         self.error = error
         self.paths: list[Path] = []
+
+    def linked_components(self) -> list[str]:
+        if self.link_error is not None:
+            raise self.link_error
+        return self.linked
 
     def write_archive(self, path: Path) -> bool:
         self.paths.append(path)
@@ -265,3 +274,34 @@ def test_staging_cleanup_failure_is_logged_and_export_continues(
     assert stuck.is_dir()
     assert not gone.exists()
     assert any(r.levelno >= logging.WARNING and "stuck" in r.getMessage() for r in caplog.records)
+
+
+def test_linked_components_warn_once_naming_them_and_export_happens(root, target, git, caplog):
+    exporter = FakeExporter(linked=["PCB:1", "Lid:2"])
+    with caplog.at_level(logging.INFO, logger="fusion_export"):
+        result = export_design(NAME, root, git, exporter)
+    assert result == target
+    assert target.read_bytes() == ARCHIVE
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert NAME in warnings[0].getMessage()
+    assert "not self-contained" in warnings[0].getMessage()
+    assert "PCB:1, Lid:2" in warnings[0].getMessage()
+
+
+def test_no_linked_components_no_warning(root, git, caplog):
+    with caplog.at_level(logging.INFO, logger="fusion_export"):
+        export_design(NAME, root, git, FakeExporter())
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_listing_links_failure_is_logged_and_export_happens(root, target, git, caplog):
+    exporter = FakeExporter(link_error=RuntimeError("no occurrences"))
+    with caplog.at_level(logging.INFO, logger="fusion_export"):
+        result = export_design(NAME, root, git, exporter)
+    assert result == target
+    assert target.read_bytes() == ARCHIVE
+    records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(records) == 1
+    assert records[0].exc_info is not None
+    assert "no occurrences" in caplog.text

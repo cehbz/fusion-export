@@ -31,9 +31,28 @@ def _remove_stale_staging(directory: Path) -> None:
 class ArchiveExporter(Protocol):
     """Writes the saved design as a Fusion archive (.f3d)."""
 
+    def linked_components(self) -> list[str]:
+        """Names of the design's components linked from other designs."""
+        ...
+
     def write_archive(self, path: Path) -> bool:
         """Write the archive to path; whether the export succeeded."""
         ...
+
+
+def _warn_if_linked(design_name: str, exporter: ArchiveExporter) -> None:
+    """Warn that the archive is not self-contained when the design has linked components."""
+    try:
+        linked = exporter.linked_components()
+    except Exception:
+        logger.warning("Could not list linked components of %r", design_name, exc_info=True)
+        return
+    if linked:
+        logger.warning(
+            "Export of %r links other designs, so the .f3d is not self-contained: %s",
+            design_name,
+            ", ".join(linked),
+        )
 
 
 def export_design(
@@ -52,6 +71,7 @@ def export_design(
             logger.info("Export of %r skipped: %s", design_name, target.reason)
             return None
         path = target.path
+        _warn_if_linked(design_name, exporter)
         ensure_lfs(target.repo, path, git)
         _remove_stale_staging(path.parent)
         staging = Path(tempfile.mkdtemp(prefix=STAGING_PREFIX, dir=path.parent))
