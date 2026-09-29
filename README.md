@@ -34,6 +34,10 @@ The `.f3d` at the resolved path, written atomically. If git does not already sto
 
 A design that links other designs exports an .f3d that is not self-contained, and the log warns with the linked components' names; Fusion refuses to open it on its own. Break the link (right-click the occurrence > Break Link) to embed it.
 
+## Restoring from the repo
+
+A design opened from its `.f3d` (File > Open > Open from my computer) is named after the file, so `aqm/boards/fan_controller/fan_controller.f3d` opens as `fan_controller`. Rename it to its `<repo>-<path>` name, here `aqm-boards-fan_controller`, before saving; otherwise the save is skipped and logged as matching no repo.
+
 ## Committing
 
 The add-in never commits or pushes. Commit the `.f3d`, and the `.gitattributes` beside it when one was written, in the project repo yourself.
