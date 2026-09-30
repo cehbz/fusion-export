@@ -1,4 +1,7 @@
-"""Fusion add-in: on every save, exports the design's .f3d into its project's repo."""
+"""Fusion adapter: on every save, exports the design's .f3d into its project's repo.
+
+Imports adsk, so only Fusion (through the installed loader) imports it.
+"""
 
 from __future__ import annotations
 
@@ -8,15 +11,15 @@ from pathlib import Path
 import adsk.core
 import adsk.fusion
 
-from .fusion_export.export import Alert, Alerts, Severity, export_design
-from .fusion_export.git import SubprocessGit
-from .fusion_export.log import PACKAGE, configure_logging
-from .fusion_export.notify import Broadcast, MacNotification
+from .export import Alert, Alerts, Severity, export_design
+from .git import SubprocessGit
+from .log import configure_logging
+from .notify import Broadcast, MacNotification
 
 PROJECTS_ROOT = Path.home() / "projects"
 LOG_DIR = Path.home() / "Library" / "Logs" / "fusion-export"
 
-logger = logging.getLogger(f"{PACKAGE}.addin")
+logger = logging.getLogger(__name__)
 
 # Fusion drops handlers nothing references.
 _save_handler: DesignSavedHandler | None = None

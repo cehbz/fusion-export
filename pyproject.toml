@@ -12,6 +12,6 @@ dev = ["pytest"]
 package = false
 
 [tool.pytest.ini_options]
-pythonpath = ["FusionExport"]
+pythonpath = ["."]
 testpaths = ["tests"]
 markers = ["integration: runs real git and git-lfs against temp repos"]

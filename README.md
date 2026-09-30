@@ -8,7 +8,9 @@ A Fusion (macOS) add-in. Fusion's cloud is not the source of truth for a design,
 ./install.sh
 ```
 
-This symlinks `FusionExport/` into Fusion's add-ins folder, so the repo is what Fusion runs. Restart Fusion; the add-in runs on startup.
+This writes `addin/FusionExport.manifest` and a loader, `addin/FusionExport.py` with this repo's path filled in, into a `FusionExport/` directory in Fusion's add-ins folder. The loader imports `fusion_export.addin` from the repo, so the repo is what Fusion runs. Other files in that directory are left alone, and an older install's symlink there is replaced. Rerun it after moving the repo.
+
+Restart Fusion to load the add-in, and again after editing the code; the add-in runs on startup.
 
 ## Naming
 

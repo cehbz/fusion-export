@@ -6,8 +6,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# The package's import name: "fusion_export" standalone, prefixed by the
-# add-in package when Fusion loads it.
+# The package's import name, whose logger the package's modules log under.
 PACKAGE = __package__
 
 LOG_FILE = "fusion-export.log"
